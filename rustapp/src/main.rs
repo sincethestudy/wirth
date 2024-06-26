@@ -3,7 +3,7 @@ use dotenv::dotenv;
 use ureq;
 use std::io::Read;
 use std::time::Instant;
-use eframe::egui;
+use eframe::egui::{self, Pos2, Vec2,ViewportCommand};
 use std::thread;
 use std::sync::mpsc;
 use serde_json::Value;
@@ -18,14 +18,14 @@ fn main() -> eframe::Result<()> {
 
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]).with_always_on_top().with_position(Pos2{x: 1200.0, y: 10.0}),
         ..Default::default()
     };
     eframe::run_native(
-        "My egui App",
+        "Wirth",
         options,
         Box::new(move |cc| {
-            Box::new(MyApp::new(tx, rx))
+            Box::new(MyApp::new(tx, rx, cc))
         }),
     )
 }
@@ -37,18 +37,20 @@ struct MyApp {
     tx: mpsc::Sender<String>,
     rx: mpsc::Receiver<String>,
     first_paint: bool,
-    mdCache: CommonMarkCache,
+    md_cache: CommonMarkCache,
 }
 
 impl MyApp {
-    fn new(tx: mpsc::Sender<String>, rx: mpsc::Receiver<String>) -> Self {
+    fn new(tx: mpsc::Sender<String>, rx: mpsc::Receiver<String>, cc: &eframe::CreationContext<'_>) -> Self {
+        setup_custom_fonts(&cc.egui_ctx);
+
         Self {
             query: "".to_owned(),
             output: "".to_owned(),
             tx,
             rx,
             first_paint: true,
-            mdCache: CommonMarkCache::default(),
+            md_cache: CommonMarkCache::default(),
         }
     }
 }
@@ -63,9 +65,11 @@ impl eframe::App for MyApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            // ui.heading("Wirth");
+            ctx.set_pixels_per_point(2.5);
+
             ui.horizontal(|ui| {
-                let response = ui.add(egui::TextEdit::singleline(&mut self.query).hint_text("I'm trying to figure out..."));
+
+                let response = ui.add(egui::TextEdit::singleline(&mut self.query).hint_text("Tell me.."));
                 if self.first_paint {
                     response.request_focus();
                     self.first_paint = false;
@@ -73,6 +77,7 @@ impl eframe::App for MyApp {
 
                 if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)){
                     self.output = String::new();
+                    ctx.send_viewport_cmd(ViewportCommand::InnerSize(Vec2 {x: 280.0 , y: 240.0 }));
                     let query_cloned = self.query.clone();
                     let tx_cloned = self.tx.clone();
                     thread::spawn(move || {
@@ -81,45 +86,23 @@ impl eframe::App for MyApp {
                 }
             });
 
-            egui::ScrollArea::vertical().show(ui, |ui| {
+
+            let scroll_section = egui::ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| {
                 CommonMarkViewer::new("viewer")
-                    .show(ui, &mut self.mdCache, &self.output);
+                    .show(ui, &mut self.md_cache, &self.output);
             });
+
+            let new_y_size = scroll_section.content_size[1]-200.0;//(scroll_section.inner_rect.max[1]-scroll_section.inner_rect.min[1]);
+            if new_y_size>0.0 {
+                ctx.send_viewport_cmd(ViewportCommand::InnerSize(Vec2 {x: 280.0 , y: 240.0+new_y_size }));
+            }
 
         });
     }
 }
 
 
-
-fn print_headers(res: Result<ureq::Response, ureq::Error>){
-    // Access and print response headers
-    if let Ok(res) = &res {
-        for header in res.headers_names() {
-            if let Some(value) = res.header(&header) {
-                println!("Header: {} - Value: {}", header, value);
-            }
-        }
-    }
-}
-
-fn print_env_var_found(env_var: &str){
-    println!("check for anthropic key");
-    match env::var(env_var) {
-        Ok(mut value) => {
-            let len = value.len();
-            if len > 40 {
-                value.replace_range(len-40.., "**********")
-            }
-            println!("MY_VARIABLE: {}", value);
-        },
-        Err(_) => println!("MY_VARIABLE not set"),
-    };
-}
-
 fn make_llm_call(query: String, tx: mpsc::Sender<String>){
-    println!("anthropic request test");
-    print_env_var_found("ANTHROPIC_API_KEY");
 
     let api_key: String = match env::var("ANTHROPIC_API_KEY") {
         Ok(value) => value,
@@ -132,8 +115,8 @@ fn make_llm_call(query: String, tx: mpsc::Sender<String>){
         "stream": true,
         "model": "claude-3-5-sonnet-20240620",
         "max_tokens": 1000,
-        "temperature": 0,
-        "system": "You are a world-class poet. Respond only with short poems. Markdown sugar baby. No need to put the code tags, just return markdown syntaxed, ill parse it.",
+        "temperature": 0.5,
+        "system": "The user is an engineer is working on a project. It could be electrical, mechanical, or software. They dont like using lots of words, so they will ask questions with few keywords so they can ask quickly. Provide a concise explanation. Strict Word Economy is applied: be concise and direct, avoiding introductory phrases or redundant wording. Don't use Anaphora. Use markdown features (not just lists) to produce a clean, formatted answer to me. Dont include the markdown start and end tags, the entire response will be parsed automatically.",
         "messages": [
             {
                 "role": "user",
@@ -202,4 +185,35 @@ fn make_llm_call(query: String, tx: mpsc::Sender<String>){
         },
         Err(error) => println!("error occured: {}", error),
     }
+}
+
+fn setup_custom_fonts(ctx: &egui::Context) {
+    // Start with the default fonts (we will be adding to them rather than replacing them).
+    let mut fonts = egui::FontDefinitions::default();
+
+    // Install my own font (maybe supporting non-latin characters).
+    // .ttf and .otf files supported.
+    fonts.font_data.insert(
+        "my_font".to_owned(),
+        egui::FontData::from_static(include_bytes!(
+            "./InterVariable.ttf"
+        )),
+    );
+
+    // Put my font first (highest priority) for proportional text:
+    fonts
+        .families
+        .entry(egui::FontFamily::Proportional)
+        .or_default()
+        .insert(0, "my_font".to_owned());
+
+    // Put my font as last fallback for monospace:
+    fonts
+        .families
+        .entry(egui::FontFamily::Monospace)
+        .or_default()
+        .push("my_font".to_owned());
+
+    // Tell egui to use these fonts:
+    ctx.set_fonts(fonts);
 }
