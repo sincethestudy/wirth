@@ -83,7 +83,6 @@ impl eframe::App for MyApp {
 
             egui::ScrollArea::vertical().show(ui, |ui| {
                 CommonMarkViewer::new("viewer")
-                    .max_image_width(Some(512))
                     .show(ui, &mut self.mdCache, &self.output);
             });
 
