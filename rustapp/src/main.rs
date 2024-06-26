@@ -4,6 +4,81 @@ use ureq;
 use std::io::Read;
 use std::time::Instant;
 use eframe::egui;
+use std::thread;
+use std::sync::mpsc;
+use serde_json::Value;
+use std::time::Duration;
+
+
+
+fn main() -> eframe::Result<()> {
+    dotenv().ok();
+    let (tx, rx) = mpsc::channel::<String>();
+
+
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
+        ..Default::default()
+    };
+    eframe::run_native(
+        "My egui App",
+        options,
+        Box::new(move |cc| {
+            Box::new(MyApp::new(tx, rx))
+        }),
+    )
+}
+
+
+struct MyApp {
+    query: String,
+    output: String,
+    tx: mpsc::Sender<String>,
+    rx: mpsc::Receiver<String>,
+}
+
+impl MyApp {
+    fn new(tx: mpsc::Sender<String>, rx: mpsc::Receiver<String>) -> Self {
+        Self {
+            query: "I want to know..".to_owned(),
+            output: "".to_owned(),
+            tx,
+            rx,
+        }
+    }
+}
+
+impl eframe::App for MyApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+
+        ctx.request_repaint_after(Duration::from_millis(16));
+
+        if let Ok(s) = self.rx.try_recv() {
+            self.output.push_str(&s);
+        }
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("Wirth");
+            ui.horizontal(|ui| {
+                let name_label = ui.label("Query: ");
+                ui.text_edit_singleline(&mut self.query)
+                    .labelled_by(name_label.id);
+            });
+            // ui.add(egui::Slider::new(&mut self.age, 0..=120).text("age"));
+            if ui.button("Submit LLM Query").clicked() {
+                let query_cloned = self.query.clone();
+                let tx_cloned = self.tx.clone();
+                thread::spawn(move || {
+                    make_llm_call(query_cloned, tx_cloned);
+                });
+            }
+            egui::ScrollArea::both().show(ui, |ui| {
+                ui.label(format!("Anthropic: '{}'", self.output));
+            });
+
+        });
+    }
+}
 
 
 
@@ -32,12 +107,10 @@ fn print_env_var_found(env_var: &str){
     };
 }
 
-fn main() {
+fn make_llm_call(query: String, tx: mpsc::Sender<String>){
     println!("anthropic request test");
-    dotenv().ok();
     print_env_var_found("ANTHROPIC_API_KEY");
 
-    
     let api_key: String = match env::var("ANTHROPIC_API_KEY") {
         Ok(value) => value,
         Err(_) => "Not Found".to_string(),
@@ -54,14 +127,13 @@ fn main() {
         "messages": [
             {
                 "role": "user",
-                "content": "Why is the ocean salty?"
+                "content": query 
             }
         ]
     });
 
     let start = Instant::now();
 
-    // try making the request with ureq
     let response: Result<ureq::Response, ureq::Error> = ureq::post(url)
         .set("x-api-key", &api_key)
         .set("Content-Type", "application/json")
@@ -72,32 +144,6 @@ fn main() {
 
     let mut first_read_done = false; // Flag to check if first read is done
     let mut time_to_first_token: u64 = 0;
-
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
-        ..Default::default()
-    };
-
-    // Our application state:
-    let mut name: String = "Arthur".to_owned();
-    let mut age: i32 = 42;
-
-    eframe::run_simple_native("My egui App", options, move |ctx, _frame| {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("My egui Application");
-            ui.horizontal(|ui| {
-                let name_label = ui.label("Your name: ");
-                ui.text_edit_singleline(&mut name)
-                    .labelled_by(name_label.id);
-            });
-            ui.add(egui::Slider::new(&mut age, 0..=120).text("age"));
-            if ui.button("Increment").clicked() {
-                age += 1;
-            }
-            ui.label(format!("Hello '{name}', age {age}"));
-        });
-    }).unwrap_or_default();
-
 
     match response {
         Ok(res) => {
@@ -119,7 +165,23 @@ fn main() {
                         }
 
                         if let Ok(s) = std::str::from_utf8(&buffer[..n]) {
-                            println!("As string: {}", s);
+
+                            let json_objects: Vec<Value> = s
+                                .lines()
+                                .filter_map(|line| line.split_once("data:").map(|(_, json)| json))
+                                .filter_map(|line| serde_json::from_str(line).ok())
+                                .collect();
+
+                            if json_objects[0].get("delta").is_some() {
+                                println!("Data object exists! {}", json_objects[0]["delta"]["text"]);
+                                tx.send(json_objects[0]["delta"]["text"].to_string().replace("\\n", "\n").replace("\"", "")).ok();
+
+                            } else {
+                                println!("Data object does not exist.");
+                            }
+
+                            
+
                         }
                     },
                     Err(e) => break,
@@ -128,16 +190,4 @@ fn main() {
         },
         Err(error) => println!("error occured: {}", error),
     }
-
-
-
-    // let body = match response {
-    //     Ok(res) => res.into_string().unwrap_or_else(|_| "Error converting response to string".to_string()),
-    //     Err(error) => format!("Error Occurred: {}", error),
-    // };
-        
-        
-    // println!("Response body: {}", body);
-
-
 }
