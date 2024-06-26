@@ -5,5 +5,6 @@ edition = "2021"
 
 [dependencies]
 dotenv = "0.15.0"
+eframe = "0.27.2"
 http = "1.1.0"
 ureq = { version = "2.9.7", features = ["json"] }

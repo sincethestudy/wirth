@@ -3,6 +3,8 @@ use dotenv::dotenv;
 use ureq;
 use std::io::Read;
 use std::time::Instant;
+use eframe::egui;
+
 
 
 fn print_headers(res: Result<ureq::Response, ureq::Error>){
@@ -33,11 +35,9 @@ fn print_env_var_found(env_var: &str){
 fn main() {
     println!("anthropic request test");
     dotenv().ok();
-
     print_env_var_found("ANTHROPIC_API_KEY");
 
     
-
     let api_key: String = match env::var("ANTHROPIC_API_KEY") {
         Ok(value) => value,
         Err(_) => "Not Found".to_string(),
@@ -71,6 +71,32 @@ fn main() {
     // print_headers(response);
 
     let mut first_read_done = false; // Flag to check if first read is done
+    let mut time_to_first_token: u64 = 0;
+
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
+        ..Default::default()
+    };
+
+    // Our application state:
+    let mut name: String = "Arthur".to_owned();
+    let mut age: i32 = 42;
+
+    eframe::run_simple_native("My egui App", options, move |ctx, _frame| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("My egui Application");
+            ui.horizontal(|ui| {
+                let name_label = ui.label("Your name: ");
+                ui.text_edit_singleline(&mut name)
+                    .labelled_by(name_label.id);
+            });
+            ui.add(egui::Slider::new(&mut age, 0..=120).text("age"));
+            if ui.button("Increment").clicked() {
+                age += 1;
+            }
+            ui.label(format!("Hello '{name}', age {age}"));
+        });
+    }).unwrap_or_default();
 
 
     match response {
@@ -87,8 +113,8 @@ fn main() {
                         println!("Read {} bytes", n);
 
                         if !first_read_done {
-                            let duration = start.elapsed();
-                            println!("Time taken for first read: {:?}", duration);
+                            time_to_first_token = start.elapsed().as_secs();
+                            println!("Time taken for first read: {:?}", time_to_first_token);
                             first_read_done = true; // Set the flag after first read
                         }
 
