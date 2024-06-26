@@ -8,6 +8,7 @@ use std::thread;
 use std::sync::mpsc;
 use serde_json::Value;
 use std::time::Duration;
+use egui_commonmark::*;
 
 
 
@@ -36,16 +37,18 @@ struct MyApp {
     tx: mpsc::Sender<String>,
     rx: mpsc::Receiver<String>,
     first_paint: bool,
+    mdCache: CommonMarkCache,
 }
 
 impl MyApp {
     fn new(tx: mpsc::Sender<String>, rx: mpsc::Receiver<String>) -> Self {
         Self {
-            query: "I want to know..".to_owned(),
+            query: "".to_owned(),
             output: "".to_owned(),
             tx,
             rx,
             first_paint: true,
+            mdCache: CommonMarkCache::default(),
         }
     }
 }
@@ -60,27 +63,28 @@ impl eframe::App for MyApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Wirth");
+            // ui.heading("Wirth");
             ui.horizontal(|ui| {
-                let name_label = ui.label("Query: ");
-                let response = ui.text_edit_singleline(&mut self.query).labelled_by(name_label.id);
+                let response = ui.add(egui::TextEdit::singleline(&mut self.query).hint_text("I'm trying to figure out..."));
                 if self.first_paint {
                     response.request_focus();
                     self.first_paint = false;
                 }
 
                 if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)){
+                    self.output = String::new();
                     let query_cloned = self.query.clone();
                     let tx_cloned = self.tx.clone();
                     thread::spawn(move || {
                         make_llm_call(query_cloned, tx_cloned);
                     });
                 }
-
             });
 
-            egui::ScrollArea::both().show(ui, |ui| {
-                ui.label(format!("Anthropic: '{}'", self.output));
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                CommonMarkViewer::new("viewer")
+                    .max_image_width(Some(512))
+                    .show(ui, &mut self.mdCache, &self.output);
             });
 
         });
@@ -130,7 +134,7 @@ fn make_llm_call(query: String, tx: mpsc::Sender<String>){
         "model": "claude-3-5-sonnet-20240620",
         "max_tokens": 1000,
         "temperature": 0,
-        "system": "You are a world-class poet. Respond only with short poems.",
+        "system": "You are a world-class poet. Respond only with short poems. Markdown sugar baby. No need to put the code tags, just return markdown syntaxed, ill parse it.",
         "messages": [
             {
                 "role": "user",
@@ -163,7 +167,7 @@ fn make_llm_call(query: String, tx: mpsc::Sender<String>){
                     Ok(0) => break, // EOF
                     Ok(n) => {
                         // Process the n bytes read into buffer
-                        println!("Read {} bytes", n);
+                        // println!("Read {} bytes", n);
 
                         if !first_read_done {
                             time_to_first_token = start.elapsed().as_secs();
@@ -179,12 +183,14 @@ fn make_llm_call(query: String, tx: mpsc::Sender<String>){
                                 .filter_map(|line| serde_json::from_str(line).ok())
                                 .collect();
 
-                            if json_objects[0].get("delta").is_some() {
-                                println!("Data object exists! {}", json_objects[0]["delta"]["text"]);
-                                tx.send(json_objects[0]["delta"]["text"].to_string().replace("\\n", "\n").replace("\"", "")).ok();
-
-                            } else {
-                                println!("Data object does not exist.");
+                            
+                            for json_object in &json_objects {
+                                if json_object.get("delta").is_some() && json_object.get("delta").unwrap().get("text").is_some() {
+                                    tx.send(json_object["delta"]["text"].to_string().replace("\\n", "\n").replace("\"", "")).ok();
+                                } 
+                                // else {
+                                    // println!("Data object does not exist.");
+                                // }
                             }
 
                             
