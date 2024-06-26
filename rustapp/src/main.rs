@@ -35,6 +35,7 @@ struct MyApp {
     output: String,
     tx: mpsc::Sender<String>,
     rx: mpsc::Receiver<String>,
+    first_paint: bool,
 }
 
 impl MyApp {
@@ -44,6 +45,7 @@ impl MyApp {
             output: "".to_owned(),
             tx,
             rx,
+            first_paint: true,
         }
     }
 }
@@ -61,17 +63,22 @@ impl eframe::App for MyApp {
             ui.heading("Wirth");
             ui.horizontal(|ui| {
                 let name_label = ui.label("Query: ");
-                ui.text_edit_singleline(&mut self.query)
-                    .labelled_by(name_label.id);
+                let response = ui.text_edit_singleline(&mut self.query).labelled_by(name_label.id);
+                if self.first_paint {
+                    response.request_focus();
+                    self.first_paint = false;
+                }
+
+                if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)){
+                    let query_cloned = self.query.clone();
+                    let tx_cloned = self.tx.clone();
+                    thread::spawn(move || {
+                        make_llm_call(query_cloned, tx_cloned);
+                    });
+                }
+
             });
-            // ui.add(egui::Slider::new(&mut self.age, 0..=120).text("age"));
-            if ui.button("Submit LLM Query").clicked() {
-                let query_cloned = self.query.clone();
-                let tx_cloned = self.tx.clone();
-                thread::spawn(move || {
-                    make_llm_call(query_cloned, tx_cloned);
-                });
-            }
+
             egui::ScrollArea::both().show(ui, |ui| {
                 ui.label(format!("Anthropic: '{}'", self.output));
             });
