@@ -167,12 +167,13 @@ fn make_llm_call(query: String, tx: mpsc::Sender<String>){
         "model": "claude-3-5-sonnet-20240620",
         "max_tokens": 1000,
         "temperature": 0.5,
-        "system": "The user is an engineer is working on a project. It could be electrical, mechanical, or software. They dont like using lots of words, so they will ask questions with few keywords so they can ask quickly. Provide a concise explanation. Strict Word Economy is applied: be concise and direct, avoiding introductory phrases or redundant wording. Don't use Anaphora. Use markdown features (not just lists) to produce a clean, formatted answer to me. Dont include the markdown start and end tags, the entire response will be parsed automatically.",
+        "system": "Provide a concise explanation. Strict Word Economy is applied: be concise and direct, avoiding introductory phrases or redundant wording. Don't use Anaphora. Begin with a clear, 1-3 sentence explanation of the topic, ensuring the content is accessible to a grade 12 level of understanding. When elaboration is requested, continue to add essential details to deepen understanding, while maintaining simplicity and brevity. Each added detail must be directly relevant and informative. Commonmark is supported. Dont include the markdown start and end tags, the entire response will be parsed automatically.",
         "messages": [
-            {
-                "role": "user",
-                "content": query 
-            }
+            {"role": "user", "content": "interposition"},
+            {"role": "assistant", "content": "Here's a revised Markdown version with fewer lists:\n\n# Interposition\n\nInterposition is the act of placing something between two other things. This concept can be applied to physical objects, people, or abstract ideas.\n\n## In Physics\n\nIn the realm of physics, interposition manifests when an object blocks the path between a light source and an observer, resulting in the creation of a shadow.\n\n## In Social Contexts\n\nSocially, interposition often takes the form of mediation. This occurs when a third party intervenes to help resolve a conflict between two other parties."},
+            {"role": "user", "content": "free list"},
+            {"role": "assistant", "content": "A memory management technique used in computer programming. It maintains a list of memory blocks that are currently not in use and available for allocation.\\n\\n```\nHead\n |\n v\n+---+---+    +---+---+    +---+---+\n| S | *-|--->| S | *-|--->| S | X |\n+---+---+    +---+---+    +---+---+\\n\\nS: Size of free block\n*: Pointer to next block\nX: NULL (end of list)\n```"},
+            {"role": "user", "content": "Thats a great answer and format, can you do the same for: ".to_owned() + &query }
         ]
     });
 
@@ -247,7 +248,9 @@ fn setup_custom_fonts(ctx: &egui::Context) {
     fonts.font_data.insert(
         "my_font".to_owned(),
         egui::FontData::from_static(include_bytes!(
-            "./InterVariable.ttf"
+            // "./InterVariable.ttf"
+            // "./GT-Sectra-Fine-Regular.ttf"
+            "./Aeonik-Bold.ttf"
         )),
     );
 
