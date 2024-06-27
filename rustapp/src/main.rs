@@ -9,12 +9,17 @@ use std::sync::mpsc;
 use serde_json::Value;
 use std::time::Duration;
 use egui_commonmark::*;
+use global_hotkey::{GlobalHotKeyManager, GlobalHotKeyEvent, HotKeyState, hotkey::{HotKey, Modifiers, Code}};
 
 
 
 fn main() -> eframe::Result<()> {
     dotenv().ok();
     let (tx, rx) = mpsc::channel::<String>();
+
+    let manager = GlobalHotKeyManager::new().unwrap();
+    let hotkey = HotKey::new(Some(Modifiers::CONTROL), Code::KeyJ);
+    manager.register(hotkey);
 
 
     let options = eframe::NativeOptions {
@@ -38,6 +43,7 @@ struct MyApp {
     rx: mpsc::Receiver<String>,
     first_paint: bool,
     md_cache: CommonMarkCache,
+    show: bool,
 }
 
 impl MyApp {
@@ -51,6 +57,7 @@ impl MyApp {
             rx,
             first_paint: true,
             md_cache: CommonMarkCache::default(),
+            show: true,
         }
     }
 }
@@ -69,10 +76,21 @@ impl eframe::App for MyApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ctx.set_pixels_per_point(2.5);
 
-            let hide_shortcut = egui::KeyboardShortcut::new(egui::Modifiers::MAC_CMD, egui::Key::H);
-
-            if ui.input_mut(|i| i.consume_shortcut(&hide_shortcut)) {
-                ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnBottom));
+            if let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
+                println!("what {:?}", event);
+                if event.state == HotKeyState::Pressed {
+                    if self.show {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnBottom));
+                        self.show = false;
+                    }
+                    else{
+                        ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                        self.show = true;
+                        self.first_paint = true;
+                        self.query = String::new();
+                    }
+                }
             }
 
             ui.horizontal(|ui| {
