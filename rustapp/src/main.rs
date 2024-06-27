@@ -95,13 +95,15 @@ impl eframe::App for MyApp {
 
             ui.horizontal(|ui| {
 
-                let response = ui.add(egui::TextEdit::singleline(&mut self.query).hint_text("Tell me.."));
+                let newline_shortcut = egui::KeyboardShortcut::new(egui::Modifiers::SHIFT, egui::Key::Enter);
+
+                let response = ui.add(egui::TextEdit::multiline(&mut self.query).hint_text("Tell me..").return_key(newline_shortcut).desired_rows(2));
                 if self.first_paint {
                     response.request_focus();
                     self.first_paint = false;
                 }
 
-                if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)){
+                if ui.input(|i| i.key_pressed(egui::Key::Enter)) && !ui.input(|i| i.modifiers.shift){
                     self.output = String::new();
                     ctx.send_viewport_cmd(ViewportCommand::InnerSize(Vec2 {x: 280.0 , y: 240.0 }));
                     let query_cloned = self.query.clone();
