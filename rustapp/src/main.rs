@@ -64,8 +64,16 @@ impl eframe::App for MyApp {
             self.output.push_str(&s);
         }
 
+
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ctx.set_pixels_per_point(2.5);
+
+            let hide_shortcut = egui::KeyboardShortcut::new(egui::Modifiers::MAC_CMD, egui::Key::H);
+
+            if ui.input_mut(|i| i.consume_shortcut(&hide_shortcut)) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnBottom));
+            }
 
             ui.horizontal(|ui| {
 
