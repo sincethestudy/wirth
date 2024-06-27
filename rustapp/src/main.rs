@@ -23,7 +23,7 @@ fn main() -> eframe::Result<()> {
 
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]).with_always_on_top().with_position(Pos2{x: 1200.0, y: 10.0}),
+        viewport: egui::ViewportBuilder::default().with_inner_size([360.0, 40.0]).with_always_on_top().with_position(Pos2{x: 1200.0, y: 10.0}).with_transparent(true),
         ..Default::default()
     };
     eframe::run_native(
@@ -44,9 +44,17 @@ struct MyApp {
     first_paint: bool,
     md_cache: CommonMarkCache,
     show: bool,
+    submitted: bool,
 }
 
 impl MyApp {
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        let mut tuna = egui::Rgba::TRANSPARENT.to_array();
+        tuna[3] = 0.5;
+        return tuna;
+
+    }
+
     fn new(tx: mpsc::Sender<String>, rx: mpsc::Receiver<String>, cc: &eframe::CreationContext<'_>) -> Self {
         setup_custom_fonts(&cc.egui_ctx);
 
@@ -58,9 +66,12 @@ impl MyApp {
             first_paint: true,
             md_cache: CommonMarkCache::default(),
             show: true,
+            submitted: false,
         }
     }
 }
+
+
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -72,12 +83,11 @@ impl eframe::App for MyApp {
         }
 
 
-
         egui::CentralPanel::default().show(ctx, |ui| {
-            ctx.set_pixels_per_point(2.5);
+            ctx.set_pixels_per_point(2.25);
 
             if let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
-                println!("what {:?}", event);
+                // println!("whhowat {:?}", event);
                 if event.state == HotKeyState::Pressed {
                     if self.show {
                         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnBottom));
@@ -86,9 +96,13 @@ impl eframe::App for MyApp {
                     else{
                         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
                         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                        ctx.send_viewport_cmd(ViewportCommand::InnerSize(Vec2 {x: ctx.screen_rect().width(), y: 40.0 }));
                         self.show = true;
+                        self.submitted = false;
                         self.first_paint = true;
                         self.query = String::new();
+                        self.output = String::new();
+
                     }
                 }
             }
@@ -97,21 +111,18 @@ impl eframe::App for MyApp {
 
                 let newline_shortcut = egui::KeyboardShortcut::new(egui::Modifiers::SHIFT, egui::Key::Enter);
 
-                let response = ui.add(egui::TextEdit::multiline(&mut self.query).hint_text("Tell me..").return_key(newline_shortcut).desired_rows(2));
-                if self.first_paint {
-                    response.request_focus();
-                    self.first_paint = false;
+                if self.submitted {
+                    let query_cloned = self.query.clone();
+                    ui.label(query_cloned);
+                }
+                else{
+                    let response = ui.add(egui::TextEdit::multiline(&mut self.query).hint_text("Tell me..").return_key(newline_shortcut).desired_rows(1));
+                    if self.first_paint {
+                        response.request_focus();
+                        self.first_paint = false;
+                    }
                 }
 
-                if ui.input(|i| i.key_pressed(egui::Key::Enter)) && !ui.input(|i| i.modifiers.shift){
-                    self.output = String::new();
-                    ctx.send_viewport_cmd(ViewportCommand::InnerSize(Vec2 {x: 280.0 , y: 240.0 }));
-                    let query_cloned = self.query.clone();
-                    let tx_cloned = self.tx.clone();
-                    thread::spawn(move || {
-                        make_llm_call(query_cloned, tx_cloned);
-                    });
-                }
             });
 
 
@@ -120,12 +131,24 @@ impl eframe::App for MyApp {
                     .show(ui, &mut self.md_cache, &self.output);
             });
 
-            let new_y_size = scroll_section.content_size[1]-200.0;//(scroll_section.inner_rect.max[1]-scroll_section.inner_rect.min[1]);
+            let new_y_size = scroll_section.content_size[1]-20.0;//(scroll_section.inner_rect.max[1]-scroll_section.inner_rect.min[1]);
             if new_y_size>0.0 {
-                ctx.send_viewport_cmd(ViewportCommand::InnerSize(Vec2 {x: 280.0 , y: 240.0+new_y_size }));
+                ctx.send_viewport_cmd(ViewportCommand::InnerSize(Vec2 {x: ctx.screen_rect().width(), y: 40.0+new_y_size }));
+            }
+
+            if ui.input(|i| i.key_pressed(egui::Key::Enter)) && !ui.input(|i| i.modifiers.shift){
+                self.submitted = true;
+                self.output = String::new();
+                ctx.send_viewport_cmd(ViewportCommand::InnerSize(Vec2 {x: ctx.screen_rect().width(), y: 40.0 }));
+                let query_cloned = self.query.clone();
+                let tx_cloned = self.tx.clone();
+                thread::spawn(move || {
+                    make_llm_call(query_cloned, tx_cloned);
+                });
             }
 
         });
+
     }
 }
 
