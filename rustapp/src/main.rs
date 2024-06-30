@@ -248,7 +248,9 @@ fn make_llm_call(messages: Vec<Message>, tx: mpsc::Sender<String>){
                             
                             for json_object in &json_objects {
                                 if json_object.get("delta").is_some() && json_object.get("delta").unwrap().get("text").is_some() {
-                                    tx.send(json_object["delta"]["text"].to_string().replace("\\n", "\n").replace("\"", "")).ok();
+                                    let mut popped_string = json_object["delta"]["text"].to_string();
+                                    popped_string.pop();
+                                    tx.send(popped_string[1..].replace("\\n", "\n").replace("\\\"", "\"")).ok();
                                 } 
                                 else if json_object.get("type").is_some() && json_object["type"]=="message_stop" {
                                     tx.send("!STOP!".to_string()).ok();
@@ -274,11 +276,16 @@ fn setup_custom_fonts(ctx: &egui::Context) {
     // Install my own font (maybe supporting non-latin characters).
     // .ttf and .otf files supported.
     fonts.font_data.insert(
-        "my_font".to_owned(),
+        "AeonikBold".to_owned(),
         egui::FontData::from_static(include_bytes!(
-            // "./InterVariable.ttf"
-            // "./GT-Sectra-Fine-Regular.ttf"
             "./Aeonik-Bold.ttf"
+        )),
+    );
+
+    fonts.font_data.insert(
+        "GT-Sectra".to_owned(),
+        egui::FontData::from_static(include_bytes!(
+            "./GT-Sectra-Fine-Regular.ttf"
         )),
     );
 
@@ -287,14 +294,20 @@ fn setup_custom_fonts(ctx: &egui::Context) {
         .families
         .entry(egui::FontFamily::Proportional)
         .or_default()
-        .insert(0, "my_font".to_owned());
+        .insert(1, "AeonikBold".to_owned());
+
+    fonts
+        .families
+        .entry(egui::FontFamily::Proportional)
+        .or_default()
+        .insert(0, "GT-Sectra".to_owned());
 
     // Put my font as last fallback for monospace:
     fonts
         .families
         .entry(egui::FontFamily::Monospace)
         .or_default()
-        .push("my_font".to_owned());
+        .push("GT-Sectra".to_owned());
 
     // Tell egui to use these fonts:
     ctx.set_fonts(fonts);
